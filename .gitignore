@@ -1,0 +1,12 @@
+*__pycache__*
+.venv
+venv/
+.DS_Store
+.sec_loc
+dist
+build
+.pytest_cache
+.vscode/
+.idea/
+*secrets*
+*.html
