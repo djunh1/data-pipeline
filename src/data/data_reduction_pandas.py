@@ -18,16 +18,75 @@ class DataReductionPandas(object):
         for k, v in self.data_helper.df_dict.items():
             df_dict[k] = v
 
-        # For each legal entity, group by counterparty's max rating, and the sum of each associated status
         df_merged = self.combine_data_frames(df_dict["dataset1"], df_dict['dataset2'])
+
+        # [A] For each legal entity, group by counterparty's max rating, and the sum of each associated status
         df_legal_entity = self.generate_df_for_legal_enties(df_merged)
         self.data_helper.generate_csv(df_legal_entity, 'legal-entities')
 
 
+        # [B] Totals for legal_entities, counterparties and tiers
+        df_full = self.generate_full_data_df(df_merged)
+        self.data_helper.generate_csv(df_full, 'full-data')
+
+        print('All data has been generated and saved to %s' % self.data_helper.save_path)
 
 
+    def generate_full_data_df(self, df):
+        '''
+        Data aggregation looking at totals for legal_entity, counter_party, and tier (separatly).
 
 
+        :param df:
+        :return: df
+        '''
+
+        # TODO: refactor to remove repeated code here.  [1] Collaboration on suitable groupings
+        # Each status is summed over the legal entity
+        df_grouped_by_legal_entity = df.groupby(['legal_entity', 'status'], as_index=False)\
+                                       .agg({'value': 'sum'})\
+                                       .pivot(index='legal_entity', columns='status', values='value')\
+                                       .reset_index()
+        df_status_legal_entity = self.swap_columns(df_grouped_by_legal_entity, 'ACCR', 'ARAP')
+
+
+        # Each status summed over the counter_party
+        df_grouped_by_counter_party = df.groupby(['counter_party', 'status'], as_index=False)\
+                                        .agg({'value': 'sum'})\
+                                        .pivot(index='counter_party',   columns='status', values='value')\
+                                        .reset_index()
+        df_status_counter_party = self.swap_columns(df_grouped_by_counter_party, 'ACCR', 'ARAP')
+
+
+        # Status summed over tier
+        df_grouped_by_counter_party = df.groupby(['tier', 'status'], as_index=False)\
+                                        .agg({'value': 'sum'})\
+                                        .pivot(index='tier', columns='status', values='value')\
+                                        .reset_index()
+
+        df_status_tier = self.swap_columns(df_grouped_by_counter_party, 'ACCR', 'ARAP')
+
+
+        # [2] Collaboration - Max rating by counter party same as first, or is this max for all counter parties?
+        df1 = df.groupby(['legal_entity'], as_index=False).agg({'counter_party': 'size', 'tier': 'size', 'rating': 'max'})
+        df1 = pd.merge(df1, df_status_legal_entity, on="legal_entity")
+
+        df2 = df.groupby(['legal_entity', 'counter_party'], as_index=False).agg({ 'tier': 'size', 'rating': 'max'})
+        df2 = pd.merge(df2, df_status_legal_entity, on="legal_entity")
+
+
+        df3 = df.groupby(['counter_party'], as_index=False).agg({'legal_entity': 'size', 'tier': 'size', 'rating': 'max'})
+        df3 = self.swap_columns(df3, 'counter_party', 'legal_entity')
+        df3 = pd.merge(df3, df_status_counter_party, on="counter_party")
+
+        df4 = df.groupby(['tier'], as_index=False).agg({'legal_entity': 'size', 'counter_party': 'size', 'rating': 'max'})
+        df4 = self.swap_columns(df4, 'legal_entity', 'tier')
+        df4 = self.swap_columns(df4, 'counter_party', 'tier')
+        df4 = pd.merge(df4, df_status_tier, on="tier")
+
+        result = pd.concat([df1, df2, df3, df4])
+
+        return result
 
 
     def generate_df_for_legal_enties(self, df):
@@ -41,8 +100,10 @@ class DataReductionPandas(object):
             {'rating': 'max'})
         df_rating = df_rating.rename(columns={"rating": "max_rating_by_counterparty"})
         df_grouped_by_legal_entity = df.groupby(['legal_entity', 'status'], as_index=False).agg({'value': 'sum'})
+
         df_status = df_grouped_by_legal_entity.pivot(index='legal_entity', columns='status', values='value').reset_index()
         df_status = self.swap_columns(df_status,'ACCR', 'ARAP')
+
         result = pd.merge(df_rating, df_status, on="legal_entity")
 
         return result
