@@ -41,7 +41,6 @@ class DataReductionPandas(object):
         :return: df
         '''
 
-        # TODO: refactor to remove repeated code here.  [1] Collaboration on suitable groupings
         # Each status is summed over the legal entity
         df_grouped_by_legal_entity = df.groupby(['legal_entity', 'status'], as_index=False)\
                                        .agg({'value': 'sum'})\
@@ -67,7 +66,6 @@ class DataReductionPandas(object):
         df_status_tier = self.swap_columns(df_grouped_by_counter_party, 'ACCR', 'ARAP')
 
 
-        # [2] Collaboration - Max rating by counter party same as first, or is this max for all counter parties?
         df1 = df.groupby(['legal_entity'], as_index=False).agg({'counter_party': 'size', 'tier': 'size', 'rating': 'max'})
         df1 = pd.merge(df1, df_status_legal_entity, on="legal_entity")
 
