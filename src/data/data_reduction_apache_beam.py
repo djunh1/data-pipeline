@@ -10,13 +10,12 @@ import os
 from pathlib import Path
 
 import apache_beam as beam
+from apache_beam import PCollection
+from apache_beam.io.filesystems import FileSystems as beam_fs
 from apache_beam.options.pipeline_options import PipelineOptions
-
-from csv import reader
-
-from apache_beam.dataframe.io import read_csv
-from apache_beam.runners.interactive import interactive_beam as ib
-from apache_beam.runners.interactive.interactive_runner import InteractiveRunner
+import codecs
+import csv
+from typing import Dict, Iterable, List
 
 
 class MyOptions(PipelineOptions):
@@ -33,27 +32,41 @@ class DataReductionApacheBeam(object):
 
 
     def run_beam_pipeline(self):
+
+        def split_by_kv(element, index, delimiter=", "):
+            splitted = element.split(delimiter)
+            print(splitted[index], element)
+            return splitted[index], element
+
+
         input_file_dict = {}
         for k, v in self.data_helper.csv_dict.items():
             input_file_dict[k] = v
 
+        input_files = self.data_helper.file_path +'ds*.csv'
+        options = PipelineOptions(flags=[], type_check_additional='all')
+
         with beam.Pipeline() as p:
-            ip = (p
-                  | beam.io.ReadFromText(input_file_dict['ds1'].name, skip_header_lines=True)
-                  | beam.Map(lambda x: x.split(','))
-                  | beam.Filter(lambda x: x[1] == 'L1')
-                  | beam.combiners.Count.Globally()
-                  | beam.Map(print)
-                  )
+            ds1  = (p | "Read ds1" >> beam.io.ReadFromText(input_file_dict['ds1'].name)
+                       | "for ds1" >> beam.Map(split_by_kv, index=2, delimiter=",")
+                      )
+
+            ds2 = (p | "Read ds2" >> beam.io.ReadFromText(input_file_dict['ds2'].name)
+                     | "to KV order" >> beam.Map(split_by_kv, index=0, delimiter=",")
+                     )
 
 
+            # merged = ((ds1, ds2) | 'Merge PCollections' >> beam.Flatten()
+            #                     | beam.Filter(lambda line: line[1] == 'L1')
+            #                     | beam.Map(lambda line: (line[0], 1))
+            #                     | 'group '>> beam.GroupByKey()
+            #                     | beam.Map(print)
+            #                     #| beam.io.WriteToText(self.data_helper.save_path + 'test.txt')
+            #           )
 
 
-    def split_by_kv(self, element, index, delimiter=", "):
-        splitted = element.split(delimiter)
-        return splitted[index], element
+            ({ ds1,  ds2} | beam.CoGroupByKey()
+                                           | beam.Map(print)
+            )
 
-    def read_headers(self, csv_file):
-        with open(csv_file, 'r') as f:
-            header_line = f.readline().strip()
-        return next(reader([header_line]))
+
