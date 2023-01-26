@@ -18,7 +18,7 @@ def run_pipeline(name):
 
     # Generate csv file using Pandas
     data_reducer_pandas = dr_pandas.DataReductionPandas(dh)
-    # data_reducer_pandas.run_data_reduction()
+    data_reducer_pandas.run_data_reduction()
 
 
     # Generate csv files using Apache Beam
@@ -27,7 +27,7 @@ def run_pipeline(name):
     dh2.add_csv('ds2')
 
     data_reducer_beam = dr_beam.DataReductionApacheBeam(dh2)
-    data_reducer_beam.run_beam_pipeline()
+    #data_reducer_beam.run_beam_pipeline()
 
 
 

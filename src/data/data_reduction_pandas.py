@@ -34,50 +34,35 @@ class DataReductionPandas(object):
 
     def generate_full_data_df(self, df):
         '''
-        Data aggregation looking at totals for legal_entity, counter_party, and tier (separatly).
-
+        Aggregates the data against legal_entities, counter_parties, and tiers. status are added for each
+        column type.
 
         :param df:
         :return: df
         '''
 
-        # Each status is summed over the legal entity
-        df_grouped_by_legal_entity = df.groupby(['legal_entity', 'status'], as_index=False)\
-                                       .agg({'value': 'sum'})\
-                                       .pivot(index='legal_entity', columns='status', values='value')\
-                                       .reset_index()
-        df_status_legal_entity = self.swap_columns(df_grouped_by_legal_entity, 'ACCR', 'ARAP')
+        # Each respective column will have status's aggregated
+
+        df_status_legal_entity = self.create_status_aggregate(df, "legal_entity")
+        df_status_counter_party = self.create_status_aggregate(df, "counter_party")
+        df_status_tier = self.create_status_aggregate(df, "tier")
 
 
-        # Each status summed over the counter_party
-        df_grouped_by_counter_party = df.groupby(['counter_party', 'status'], as_index=False)\
-                                        .agg({'value': 'sum'})\
-                                        .pivot(index='counter_party',   columns='status', values='value')\
-                                        .reset_index()
-        df_status_counter_party = self.swap_columns(df_grouped_by_counter_party, 'ACCR', 'ARAP')
-
-
-        # Status summed over tier
-        df_grouped_by_counter_party = df.groupby(['tier', 'status'], as_index=False)\
-                                        .agg({'value': 'sum'})\
-                                        .pivot(index='tier', columns='status', values='value')\
-                                        .reset_index()
-
-        df_status_tier = self.swap_columns(df_grouped_by_counter_party, 'ACCR', 'ARAP')
-
-
-        df1 = df.groupby(['legal_entity'], as_index=False).agg({'counter_party': 'size', 'tier': 'size', 'rating': 'max'})
+        df1 = df.groupby(['legal_entity'], as_index=False)\
+                .agg({'counter_party': 'size', 'tier': 'size', 'rating': 'max'})
         df1 = pd.merge(df1, df_status_legal_entity, on="legal_entity")
 
         df2 = df.groupby(['legal_entity', 'counter_party'], as_index=False).agg({ 'tier': 'size', 'rating': 'max'})
         df2 = pd.merge(df2, df_status_legal_entity, on="legal_entity")
 
 
-        df3 = df.groupby(['counter_party'], as_index=False).agg({'legal_entity': 'size', 'tier': 'size', 'rating': 'max'})
+        df3 = df.groupby(['counter_party'], as_index=False)\
+                .agg({'legal_entity': 'size', 'tier': 'size', 'rating': 'max'})
         df3 = self.swap_columns(df3, 'counter_party', 'legal_entity')
         df3 = pd.merge(df3, df_status_counter_party, on="counter_party")
 
-        df4 = df.groupby(['tier'], as_index=False).agg({'legal_entity': 'size', 'counter_party': 'size', 'rating': 'max'})
+        df4 = df.groupby(['tier'], as_index=False)\
+                .agg({'legal_entity': 'size', 'counter_party': 'size', 'rating': 'max'})
         df4 = self.swap_columns(df4, 'legal_entity', 'tier')
         df4 = self.swap_columns(df4, 'counter_party', 'tier')
         df4 = pd.merge(df4, df_status_tier, on="tier")
@@ -94,17 +79,27 @@ class DataReductionPandas(object):
         :return: df
         '''
 
-        df_rating = df.groupby(['legal_entity', 'counter_party', 'tier'], as_index=False).agg(
-            {'rating': 'max'})
-        df_rating = df_rating.rename(columns={"rating": "max_rating_by_counterparty"})
-        df_grouped_by_legal_entity = df.groupby(['legal_entity', 'status'], as_index=False).agg({'value': 'sum'})
-
-        df_status = df_grouped_by_legal_entity.pivot(index='legal_entity', columns='status', values='value').reset_index()
-        df_status = self.swap_columns(df_status,'ACCR', 'ARAP')
-
-        result = pd.merge(df_rating, df_status, on="legal_entity")
+        df_rating = df.groupby(['legal_entity', 'counter_party', 'tier'], as_index=False)\
+                      .agg({'rating': 'max'})\
+                      .rename(columns={"rating": "max_rating_by_counterparty"})
+        df_status_by_legal_entity = self.create_status_aggregate(df, "legal_entity")
+        result = pd.merge(df_rating, df_status_by_legal_entity, on="legal_entity")
 
         return result
+
+    def create_status_aggregate(self, df, aggregate_type):
+        '''
+        Status is aggregated commonly against the appropriate column such as legal_entity etc.
+        :param df:
+        :param aggregate_type:
+        :return: df (with each status summed up)
+        '''
+        df_status = df.groupby(['%s' % aggregate_type, 'status'], as_index=False)\
+                                       .agg({'value': 'sum'})\
+                                       .pivot(index='%s' % aggregate_type, columns='status',  values='value')\
+                                       .reset_index()
+        df_status = self.swap_columns(df_status, 'ACCR', 'ARAP')
+        return df_status
 
 
     def swap_columns(self, df, col1, col2):
